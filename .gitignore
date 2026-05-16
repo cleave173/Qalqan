@@ -1,0 +1,34 @@
+# ── Python ──────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# ── Docker ──────────────────────────────────────
+docker-compose.override.yml
+
+# ── IDE ─────────────────────────────────────────
+.idea/
+.vscode/
+*.iws
+*.iml
+*.ipr
+
+# ── OS ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Flutter ─────────────────────────────────────
+frontend/.dart_tool/
+frontend/.packages
+frontend/build/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/android/.gradle/
+frontend/ios/Pods/
+frontend/ios/.symlinks/
