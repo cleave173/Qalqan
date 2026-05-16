@@ -31,7 +31,7 @@ Qalqan is an MVP for family antifraud protection. The Android app monitors an ac
 Environment variables:
 
 ```bash
-DATABASE_URL=postgresql+asyncpg://pry_user:pry_secret@localhost:5432/pry_db
+DATABASE_URL=postgresql+asyncpg://qalqan_user:qalqan_secret@localhost:5432/qalqan_db
 SECRET_KEY=change-me
 TELEGRAM_BOT_TOKEN=123456:telegram-token
 ```
@@ -77,8 +77,10 @@ Debug APK output:
 frontend/build/app/outputs/flutter-apk/app-debug.apk
 ```
 
+The Flutter project is Android-focused for this MVP.
+
 ## Notes
 
 - Target SDK is set to `29` for the requested Android 9-10 compatibility profile.
-- `minSdk` is `24` because the existing `flutter_tts` dependency requires it.
+- `minSdk` is `24`; `targetSdk` is `29` for the requested Android 9-10 compatibility profile.
 - Speech-to-text during a phone call depends on Android device, firmware and audio routing behavior. The critical SMS path and direct SMS alert path are native and do not depend on internet access.

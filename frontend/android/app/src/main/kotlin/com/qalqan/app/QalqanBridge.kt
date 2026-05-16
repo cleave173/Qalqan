@@ -1,4 +1,4 @@
-package com.pry.pry_app
+package com.qalqan.app
 
 import android.content.Context
 import android.telephony.SmsManager

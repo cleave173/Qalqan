@@ -1,20 +1,18 @@
-version: '3.9'
-
 services:
   db:
     image: postgres:16-alpine
-    container_name: pry_db
+    container_name: qalqan_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: pry_user
-      POSTGRES_PASSWORD: pry_secret
-      POSTGRES_DB: pry_db
+      POSTGRES_USER: qalqan_user
+      POSTGRES_PASSWORD: qalqan_secret
+      POSTGRES_DB: qalqan_db
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pry_user -d pry_db"]
+      test: ["CMD-SHELL", "pg_isready -U qalqan_user -d qalqan_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,16 +21,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: pry_api
+    container_name: qalqan_api
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://pry_user:pry_secret@db:5432/pry_db
+      DATABASE_URL: postgresql+asyncpg://qalqan_user:qalqan_secret@db:5432/qalqan_db
       SECRET_KEY: super-secret-change-me-in-production
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy

@@ -1,4 +1,4 @@
-package com.pry.pry_app
+package com.qalqan.app
 
 import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent

@@ -1,11 +1,11 @@
-"""Auth router – register and login."""
+"""Auth router for child accounts."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import User
-from app.schemas import UserCreate, UserLogin, Token, UserResponse
+from app.schemas import Token, UserCreate, UserLogin, UserResponse
 from app.auth import hash_password, verify_password, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -21,15 +21,17 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
         email=data.email,
         hashed_password=hash_password(data.password),
         display_name=data.display_name,
-        interface_lang=data.interface_lang,
-        target_lang=data.target_lang,
-        current_phase_id=1,
     )
     db.add(user)
     await db.flush()
     await db.refresh(user)
     token = create_access_token(str(user.id))
     return Token(access_token=token)
+
+
+@router.get("/me", response_model=UserResponse)
+async def me(user: User = Depends(get_current_user)):
+    return user
 
 
 @router.post("/login", response_model=Token)

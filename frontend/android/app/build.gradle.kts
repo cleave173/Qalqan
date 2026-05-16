@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.pry.pry_app"
+    namespace = "com.qalqan.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,7 +20,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.pry.qalqan"
+        applicationId = "com.qalqan.app"
         minSdk = 24
         targetSdk = 29
         versionCode = flutter.versionCode

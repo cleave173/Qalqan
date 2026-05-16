@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:pry_app/core/theme/app_theme.dart';
-import 'package:pry_app/core/router/app_router.dart';
+import 'package:qalqan_app/core/router/app_router.dart';
+import 'package:qalqan_app/core/theme/app_theme.dart';
 
 void main() {
-  runApp(const ProviderScope(child: PryApp()));
+  runApp(const QalqanApp());
 }
 
-class PryApp extends StatelessWidget {
-  const PryApp({super.key});
+class QalqanApp extends StatelessWidget {
+  const QalqanApp({super.key});
 
   @override
   Widget build(BuildContext context) {
