@@ -4,7 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:qalqan_app/core/api/api_client.dart';
+import 'package:qalqan_app/core/theme/app_theme.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -246,78 +248,128 @@ class _QalqanScreenState extends State<QalqanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Qalqan')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            _StatusPanel(
-              protectionEnabled: _protectionEnabled,
-              callActive: _callActive,
-              speechReady: _speechReady,
-              status: _status,
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _parentPhoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Номер мамы',
-                prefixIcon: Icon(Icons.phone),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFEAF0EA), AppTheme.background],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1120),
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  _TopBar(
+                    protectionEnabled: _protectionEnabled,
+                    onLogout: () async {
+                      await ApiClient.clearToken();
+                      if (context.mounted) {
+                        context.go('/auth');
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final wide = constraints.maxWidth >= 860;
+                      final statusPanel = _StatusPanel(
+                        protectionEnabled: _protectionEnabled,
+                        callActive: _callActive,
+                        speechReady: _speechReady,
+                        status: _status,
+                      );
+                      final controls = _SettingsPanel(
+                        parentPhoneController: _parentPhoneController,
+                        childPhoneController: _childPhoneController,
+                        telegramChatController: _telegramChatController,
+                        busy: _busy,
+                        onEnable: _enableProtection,
+                      );
+
+                      if (!wide) {
+                        return Column(
+                          children: [
+                            statusPanel,
+                            const SizedBox(height: 14),
+                            controls,
+                          ],
+                        );
+                      }
+
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 11, child: statusPanel),
+                          const SizedBox(width: 16),
+                          Expanded(flex: 9, child: controls),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _SignalPanel(triggerPhrases: _triggerPhrases),
+                  if (_lastTranscript.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    _TranscriptPanel(transcript: _lastTranscript),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _childPhoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Номер ребенка для прямого SMS',
-                prefixIcon: Icon(Icons.sms),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _telegramChatController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Telegram chat_id ребенка',
-                prefixIcon: Icon(Icons.send),
-              ),
-            ),
-            const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: _busy ? null : _enableProtection,
-              icon: _busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.shield),
-              label: const Text('Включить защиту'),
-            ),
-            const SizedBox(height: 20),
-            if (_lastTranscript.isNotEmpty) ...[
-              Text(
-                'Последняя расшифровка',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: colors.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: colors.outlineVariant),
-                ),
-                child: Text(_lastTranscript),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.protectionEnabled, required this.onLogout});
+
+  final bool protectionEnabled;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: AppTheme.primaryDark,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.shield_outlined, color: Colors.white),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Qalqan', style: Theme.of(context).textTheme.titleLarge),
+              Text(
+                'Семейная антифрод-панель',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+        _StatePill(
+          label: protectionEnabled ? 'Active' : 'Standby',
+          tone: protectionEnabled ? _PillTone.success : _PillTone.neutral,
+        ),
+        const SizedBox(width: 8),
+        IconButton.filledTonal(
+          tooltip: 'Выйти',
+          onPressed: onLogout,
+          icon: const Icon(Icons.logout),
+        ),
+      ],
     );
   }
 }
@@ -337,42 +389,83 @@ class _StatusPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: protectionEnabled ? colors.primary : colors.outlineVariant,
-        ),
-      ),
+    final title = protectionEnabled ? 'Защита включена' : 'Ожидает настройки';
+    return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                protectionEnabled ? Icons.shield : Icons.shield_outlined,
-                color: protectionEnabled ? colors.primary : colors.outline,
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: protectionEnabled
+                      ? AppTheme.primaryDark
+                      : const Color(0xFFECE8DF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  protectionEnabled
+                      ? Icons.verified_user
+                      : Icons.shield_outlined,
+                  color: protectionEnabled ? Colors.white : AppTheme.muted,
+                ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 14),
               Expanded(
-                child: Text(
-                  status,
-                  style: Theme.of(context).textTheme.titleMedium,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(status, style: Theme.of(context).textTheme.bodyMedium),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          const SizedBox(height: 22),
+          Row(
             children: [
-              _Chip(label: protectionEnabled ? 'Активна' : 'Отключена'),
-              _Chip(label: callActive ? 'OFFHOOK' : 'IDLE'),
-              _Chip(label: speechReady ? 'STT готов' : 'STT нет'),
+              Expanded(
+                child: _MetricTile(
+                  icon: Icons.call,
+                  label: 'Звонок',
+                  value: callActive ? 'OFFHOOK' : 'IDLE',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MetricTile(
+                  icon: Icons.hearing,
+                  label: 'STT',
+                  value: speechReady ? 'Готов' : 'Нет',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _StatePill(
+                label: protectionEnabled ? 'Telegram канал' : 'Нужно включить',
+                tone: protectionEnabled ? _PillTone.success : _PillTone.neutral,
+              ),
+              _StatePill(
+                label: callActive ? 'Активный звонок' : 'Звонка нет',
+                tone: callActive ? _PillTone.warning : _PillTone.neutral,
+              ),
+              _StatePill(
+                label: kIsWeb ? 'Web preview' : 'Android device',
+                tone: kIsWeb ? _PillTone.neutral : _PillTone.success,
+              ),
             ],
           ),
         ],
@@ -381,22 +474,217 @@ class _StatusPanel extends StatelessWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label});
+class _SettingsPanel extends StatelessWidget {
+  const _SettingsPanel({
+    required this.parentPhoneController,
+    required this.childPhoneController,
+    required this.telegramChatController,
+    required this.busy,
+    required this.onEnable,
+  });
 
-  final String label;
+  final TextEditingController parentPhoneController;
+  final TextEditingController childPhoneController;
+  final TextEditingController telegramChatController;
+  final bool busy;
+  final VoidCallback onEnable;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Каналы оповещения',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Укажи номер мамы, номер ребенка для прямого SMS и chat_id Telegram.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            controller: parentPhoneController,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Номер мамы',
+              prefixIcon: Icon(Icons.phone),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: childPhoneController,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Номер ребенка',
+              prefixIcon: Icon(Icons.sms_outlined),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: telegramChatController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Telegram chat_id',
+              prefixIcon: Icon(Icons.send_outlined),
+            ),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: busy ? null : onEnable,
+            icon: busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.power_settings_new),
+            label: const Text('Сохранить и включить'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SignalPanel extends StatelessWidget {
+  const _SignalPanel({required this.triggerPhrases});
+
+  final List<String> triggerPhrases;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Сигналы риска', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 6),
+          Text(
+            'Во время звонка Android-модуль отслеживает SMS-коды от банков/1414 и STT-фразы из словаря.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: triggerPhrases
+                .map(
+                  (phrase) =>
+                      _StatePill(label: phrase, tone: _PillTone.neutral),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TranscriptPanel extends StatelessWidget {
+  const _TranscriptPanel({required this.transcript});
+
+  final String transcript;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Последняя расшифровка',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 10),
+          Text(transcript, style: Theme.of(context).textTheme.bodyLarge),
+        ],
+      ),
+    );
+  }
+}
+
+class _Panel extends StatelessWidget {
+  const _Panel({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(padding: const EdgeInsets.all(22), child: child),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colors.secondaryContainer,
+        color: const Color(0xFFF5F2EC),
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.line),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: AppTheme.primary, size: 20),
+            const SizedBox(height: 10),
+            Text(label, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 3),
+            Text(value, style: Theme.of(context).textTheme.titleMedium),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _PillTone { neutral, success, warning }
+
+class _StatePill extends StatelessWidget {
+  const _StatePill({required this.label, required this.tone});
+
+  final String label;
+  final _PillTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = switch (tone) {
+      _PillTone.success => (const Color(0xFFE7F2ED), AppTheme.primary),
+      _PillTone.warning => (const Color(0xFFFBECD9), AppTheme.accent),
+      _PillTone.neutral => (const Color(0xFFF2EFE8), AppTheme.muted),
+    };
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.$1,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.$2.withValues(alpha: 0.18)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.labelLarge?.copyWith(color: colors.$2, fontSize: 12),
+        ),
       ),
     );
   }

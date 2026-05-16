@@ -36,12 +36,29 @@ SECRET_KEY=change-me
 TELEGRAM_BOT_TOKEN=123456:telegram-token
 ```
 
+Telegram setup:
+
+1. Create a bot in Telegram through `@BotFather` and copy the token.
+2. Put the token into the project `.env` file as `TELEGRAM_BOT_TOKEN=...`.
+3. The child must open the bot and press Start once.
+4. Get the child's `chat_id` through `https://api.telegram.org/bot<token>/getUpdates` after that Start message.
+5. Enter that `chat_id` in the Qalqan app field `Telegram chat_id`.
+
+The backend does not run a long-polling bot process. It sends alerts through Telegram Bot API when `/qalqan/alerts` is called. The alert includes an inline button with `tel:<parent_phone>` so the child can quickly call the parent.
+
 Run locally:
 
 ```bash
 cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --reload
+```
+
+Run with Docker:
+
+```bash
+cp .env.example .env
+docker compose up -d db api
 ```
 
 Main Qalqan endpoints:

@@ -21,6 +21,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: qalqan-api
     container_name: qalqan_api
     restart: unless-stopped
     ports:
