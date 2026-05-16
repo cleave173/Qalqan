@@ -17,6 +17,13 @@ class QalqanScreen extends StatefulWidget {
   State<QalqanScreen> createState() => _QalqanScreenState();
 }
 
+String _subscriptionPrice(String plan, String period) {
+  if (plan == 'family' && period == 'yearly') return '24 900 ₸';
+  if (plan == 'family') return '2 490 ₸';
+  if (period == 'yearly') return '9 900 ₸';
+  return '990 ₸';
+}
+
 class _QalqanScreenState extends State<QalqanScreen> {
   static const _methodChannel = MethodChannel('qalqan/protection');
   static const _eventChannel = EventChannel('qalqan/events');
@@ -170,12 +177,7 @@ class _QalqanScreenState extends State<QalqanScreen> {
   Future<bool> _showCheckoutDialog() async {
     final planTitle = _subscriptionPlan == 'family' ? 'Family' : 'Personal';
     final periodTitle = _billingPeriod == 'yearly' ? 'год' : 'месяц';
-    final price = switch ((_subscriptionPlan, _billingPeriod)) {
-      ('family', 'yearly') => '29 900 ₸',
-      ('family', _) => '2 990 ₸',
-      (_, 'yearly') => '14 900 ₸',
-      _ => '1 490 ₸',
-    };
+    final price = _subscriptionPrice(_subscriptionPlan, _billingPeriod);
 
     final result = await showDialog<bool>(
       context: context,
@@ -826,10 +828,8 @@ class _SubscriptionPanel extends StatelessWidget {
   }
 
   String get _priceTitle {
-    if (plan == 'family' && period == 'yearly') return 'Демо: 29 900 ₸ / год';
-    if (plan == 'family') return 'Демо: 2 990 ₸ / месяц';
-    if (period == 'yearly') return 'Демо: 14 900 ₸ / год';
-    return 'Демо: 1 490 ₸ / месяц';
+    final suffix = period == 'yearly' ? 'год' : 'месяц';
+    return 'Демо: ${_subscriptionPrice(plan, period)} / $suffix';
   }
 
   String get _expiresText {

@@ -73,8 +73,8 @@ Main Qalqan endpoints:
 Subscription MVP:
 
 - New child accounts start with a 20-day `trial`.
-- `personal` allows 1 parent phone.
-- `family` allows up to 4 parent phones.
+- `personal` allows 1 parent phone: `990 ₸ / month` or `9 900 ₸ / year`.
+- `family` allows up to 4 parent phones: `2 490 ₸ / month` or `24 900 ₸ / year`.
 - `subscription_period` can be `monthly` or `yearly`.
 - Real payments are not connected in the MVP. The app uses a demo checkout flow and stores the resulting active subscription in PostgreSQL.
 - Trial and paid subscriptions have expiration dates. Expired subscriptions are blocked until demo checkout is completed again.
