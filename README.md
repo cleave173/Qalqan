@@ -65,16 +65,19 @@ Main Qalqan endpoints:
 
 - `GET /qalqan/profile`
 - `PUT /qalqan/profile`
+- `POST /qalqan/subscription/checkout`
 - `POST /qalqan/parents`
 - `DELETE /qalqan/parents/{parent_id}`
 - `POST /qalqan/alerts`
 
 Subscription MVP:
 
+- New child accounts start with a 20-day `trial`.
 - `personal` allows 1 parent phone.
 - `family` allows up to 4 parent phones.
 - `subscription_period` can be `monthly` or `yearly`.
-- Payment is not connected in the MVP, but the selected plan and period are persisted in PostgreSQL.
+- Real payments are not connected in the MVP. The app uses a demo checkout flow and stores the resulting active subscription in PostgreSQL.
+- Trial and paid subscriptions have expiration dates. Expired subscriptions are blocked until demo checkout is completed again.
 - Downgrading from `family` to `personal` is blocked when more than 1 parent phone is already bound.
 
 All Qalqan endpoints use the existing Bearer JWT auth flow.

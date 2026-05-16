@@ -43,7 +43,7 @@ class QalqanProfile(Base):
     )
     subscription_plan: Mapped[str] = mapped_column(String(20), default="personal")
     subscription_period: Mapped[str] = mapped_column(String(20), default="monthly")
-    subscription_status: Mapped[str] = mapped_column(String(20), default="active")
+    subscription_status: Mapped[str] = mapped_column(String(20), default="trial")
     subscription_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )

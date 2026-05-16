@@ -44,6 +44,7 @@ class _QalqanScreenState extends State<QalqanScreen> {
   bool _callActive = false;
   bool _protectionEnabled = false;
   bool _busy = false;
+  bool _checkoutBusy = false;
   bool _profileLoading = false;
   String _status = 'Защита не включена';
   String _lastTranscript = '';
@@ -53,6 +54,7 @@ class _QalqanScreenState extends State<QalqanScreen> {
   String _billingPeriod = 'monthly';
   String _subscriptionStatus = 'active';
   String? _subscriptionExpiresAt;
+  int _trialDaysRemaining = 0;
   int _parentLimit = 1;
   int _parentCount = 0;
 
@@ -103,8 +105,6 @@ class _QalqanScreenState extends State<QalqanScreen> {
       final profileResponse = await ApiClient.dio.put(
         '/qalqan/profile',
         data: {
-          'subscription_plan': _subscriptionPlan,
-          'subscription_period': _billingPeriod,
           'child_phone': _childPhoneController.text.trim(),
           'telegram_chat_id': _telegramChatController.text.trim().isEmpty
               ? null
@@ -138,6 +138,116 @@ class _QalqanScreenState extends State<QalqanScreen> {
     }
   }
 
+  Future<void> _checkoutSubscription() async {
+    final confirmed = await _showCheckoutDialog();
+    if (!confirmed || !mounted) return;
+
+    setState(() => _checkoutBusy = true);
+    try {
+      final response = await ApiClient.dio.post(
+        '/qalqan/subscription/checkout',
+        data: {
+          'subscription_plan': _subscriptionPlan,
+          'subscription_period': _billingPeriod,
+        },
+      );
+      _applyProfile(response.data);
+      if (!mounted) return;
+      setState(() => _status = 'Подписка оформлена в демо-режиме');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Демо-оплата прошла успешно')),
+      );
+    } on DioException catch (error) {
+      _showError(
+        error.response?.data?['detail']?.toString() ??
+            'Не удалось оформить подписку',
+      );
+    } finally {
+      if (mounted) setState(() => _checkoutBusy = false);
+    }
+  }
+
+  Future<bool> _showCheckoutDialog() async {
+    final planTitle = _subscriptionPlan == 'family' ? 'Family' : 'Personal';
+    final periodTitle = _billingPeriod == 'yearly' ? 'год' : 'месяц';
+    final price = switch ((_subscriptionPlan, _billingPeriod)) {
+      ('family', 'yearly') => '29 900 ₸',
+      ('family', _) => '2 990 ₸',
+      (_, 'yearly') => '14 900 ₸',
+      _ => '1 490 ₸',
+    };
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Оформление подписки'),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _CheckoutSummary(
+                  plan: planTitle,
+                  period: periodTitle,
+                  price: price,
+                ),
+                const SizedBox(height: 16),
+                const TextField(
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Номер карты',
+                    hintText: '4242 4242 4242 4242',
+                    prefixIcon: Icon(Icons.credit_card_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.datetime,
+                        decoration: InputDecoration(
+                          labelText: 'Срок',
+                          hintText: '12/29',
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: 'CVC',
+                          hintText: '123',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.lock_outline),
+              label: const Text('Подтвердить демо-оплату'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return result ?? false;
+  }
+
   Future<void> _loadProfile() async {
     setState(() => _profileLoading = true);
     try {
@@ -159,6 +269,8 @@ class _QalqanScreenState extends State<QalqanScreen> {
       _billingPeriod = data['subscription_period']?.toString() ?? 'monthly';
       _subscriptionStatus = data['subscription_status']?.toString() ?? 'active';
       _subscriptionExpiresAt = data['subscription_expires_at']?.toString();
+      _trialDaysRemaining =
+          int.tryParse(data['trial_days_remaining']?.toString() ?? '') ?? 0;
       _parentLimit = int.tryParse(data['parent_limit']?.toString() ?? '') ?? 1;
       _parentCount = parents is List ? parents.length : 0;
       _childPhoneController.text =
@@ -351,12 +463,15 @@ class _QalqanScreenState extends State<QalqanScreen> {
                         period: _billingPeriod,
                         status: _subscriptionStatus,
                         expiresAt: _subscriptionExpiresAt,
+                        trialDaysRemaining: _trialDaysRemaining,
                         parentLimit: _parentLimit,
                         parentCount: _parentCount,
                         loading: _profileLoading,
+                        checkoutBusy: _checkoutBusy,
                         onPlanChanged: (value) => _setSubscription(plan: value),
                         onPeriodChanged: (value) =>
                             _setSubscription(period: value),
+                        onCheckout: _checkoutSubscription,
                       );
 
                       if (!wide) {
@@ -449,6 +564,45 @@ class _TopBar extends StatelessWidget {
           icon: const Icon(Icons.logout),
         ),
       ],
+    );
+  }
+}
+
+class _CheckoutSummary extends StatelessWidget {
+  const _CheckoutSummary({
+    required this.plan,
+    required this.period,
+    required this.price,
+  });
+
+  final String plan;
+  final String period;
+  final String price;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F2EC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.line),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            const Icon(Icons.receipt_long_outlined, color: AppTheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '$plan на $period',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Text(price, style: Theme.of(context).textTheme.titleMedium),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -634,25 +788,49 @@ class _SubscriptionPanel extends StatelessWidget {
     required this.period,
     required this.status,
     required this.expiresAt,
+    required this.trialDaysRemaining,
     required this.parentLimit,
     required this.parentCount,
     required this.loading,
+    required this.checkoutBusy,
     required this.onPlanChanged,
     required this.onPeriodChanged,
+    required this.onCheckout,
   });
 
   final String plan;
   final String period;
   final String status;
   final String? expiresAt;
+  final int trialDaysRemaining;
   final int parentLimit;
   final int parentCount;
   final bool loading;
+  final bool checkoutBusy;
   final ValueChanged<String> onPlanChanged;
   final ValueChanged<String> onPeriodChanged;
+  final VoidCallback onCheckout;
 
   String get _planTitle => plan == 'family' ? 'Family' : 'Personal';
   String get _periodTitle => period == 'yearly' ? 'Годовая' : 'Месячная';
+  String get _statusTitle {
+    if (status == 'trial') return 'Пробный период';
+    if (status == 'expired') return 'Истекла';
+    return 'Активна';
+  }
+
+  _PillTone get _statusTone {
+    if (status == 'trial') return _PillTone.warning;
+    if (status == 'expired') return _PillTone.neutral;
+    return _PillTone.success;
+  }
+
+  String get _priceTitle {
+    if (plan == 'family' && period == 'yearly') return 'Демо: 29 900 ₸ / год';
+    if (plan == 'family') return 'Демо: 2 990 ₸ / месяц';
+    if (period == 'yearly') return 'Демо: 14 900 ₸ / год';
+    return 'Демо: 1 490 ₸ / месяц';
+  }
 
   String get _expiresText {
     final raw = expiresAt;
@@ -685,12 +863,16 @@ class _SubscriptionPanel extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               else
-                _StatePill(label: status, tone: _PillTone.success),
+                _StatePill(label: _statusTitle, tone: _statusTone),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            'Выбери тариф и период. Оплата в MVP не подключена, но лимиты работают через backend.',
+            status == 'trial'
+                ? 'Сейчас включен пробный период на 20 дней. После оформления демо-оплаты тариф активируется как настоящая подписка.'
+                : status == 'expired'
+                ? 'Подписка закончилась. Оформи демо-оплату, чтобы снова включить лимиты и алерты.'
+                : 'Тариф активен. Можно оформить другой план через демо-оплату, лимиты обновятся на backend.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 18),
@@ -728,6 +910,69 @@ class _SubscriptionPanel extends StatelessWidget {
             onSelectionChanged: (selection) => onPeriodChanged(selection.first),
           ),
           const SizedBox(height: 16),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F2EC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.line),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryDark,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.credit_card_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _priceTitle,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Тестовая карта: 4242 4242 4242 4242',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: checkoutBusy ? null : onCheckout,
+            icon: checkoutBusy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.lock_outline),
+            label: Text(
+              status == 'trial'
+                  ? 'Оформить после trial'
+                  : status == 'expired'
+                  ? 'Возобновить подписку'
+                  : 'Переоформить подписку',
+            ),
+          ),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
@@ -749,7 +994,11 @@ class _SubscriptionPanel extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _StatePill(
-            label: 'Активна до: $_expiresText',
+            label: status == 'trial'
+                ? 'Trial: осталось $trialDaysRemaining дн. До: $_expiresText'
+                : status == 'expired'
+                ? 'Истекла: $_expiresText'
+                : 'Активна до: $_expiresText',
             tone: _PillTone.neutral,
           ),
         ],

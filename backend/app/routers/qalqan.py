@@ -18,6 +18,7 @@ from app.schemas import (
     QalqanParentResponse,
     QalqanProfileResponse,
     QalqanProfileUpsert,
+    QalqanSubscriptionCheckoutRequest,
 )
 
 router = APIRouter(prefix="/qalqan", tags=["qalqan"])
@@ -31,6 +32,8 @@ PERIOD_DAYS = {
     "monthly": 30,
     "yearly": 365,
 }
+
+TRIAL_DAYS = 20
 
 
 def _normalize_plan(plan: str) -> str:
@@ -61,16 +64,53 @@ async def _ensure_profile(user: User, db: AsyncSession) -> QalqanProfile:
             user_id=user.id,
             subscription_plan="personal",
             subscription_period="monthly",
-            subscription_status="active",
-            subscription_expires_at=_subscription_expiry("monthly"),
+            subscription_status="trial",
+            subscription_expires_at=_trial_expiry(),
         )
         db.add(profile)
         await db.flush()
     return profile
 
 
+def _trial_expiry() -> datetime:
+    return datetime.utcnow() + timedelta(days=TRIAL_DAYS)
+
+
 def _subscription_expiry(period: str) -> datetime:
     return datetime.utcnow() + timedelta(days=PERIOD_DAYS[period])
+
+
+def _trial_days_remaining(profile: QalqanProfile) -> int:
+    if profile.subscription_status != "trial" or profile.subscription_expires_at is None:
+        return 0
+    remaining = profile.subscription_expires_at - datetime.utcnow()
+    return max(0, remaining.days + (1 if remaining.seconds else 0))
+
+
+async def _refresh_subscription_status(
+    profile: QalqanProfile,
+    db: AsyncSession,
+) -> None:
+    if (
+        profile.subscription_status in {"trial", "active"}
+        and profile.subscription_expires_at is not None
+        and profile.subscription_expires_at <= datetime.utcnow()
+    ):
+        profile.subscription_status = "expired"
+        db.add(profile)
+        await db.flush()
+
+
+async def _require_available_subscription(
+    profile: QalqanProfile,
+    db: AsyncSession,
+) -> None:
+    await _refresh_subscription_status(profile, db)
+    if profile.subscription_status == "expired":
+        raise HTTPException(
+            status_code=402,
+            detail="Subscription expired. Complete demo checkout to continue.",
+        )
 
 
 async def _parent_count(user: User, db: AsyncSession) -> int:
@@ -84,6 +124,7 @@ async def _parent_count(user: User, db: AsyncSession) -> int:
 
 async def _profile_response(user: User, db: AsyncSession) -> QalqanProfileResponse:
     profile = await _ensure_profile(user, db)
+    await _refresh_subscription_status(profile, db)
     parents_result = await db.execute(
         select(QalqanParentPhone)
         .where(QalqanParentPhone.child_user_id == user.id)
@@ -96,6 +137,7 @@ async def _profile_response(user: User, db: AsyncSession) -> QalqanProfileRespon
         subscription_period=profile.subscription_period,
         subscription_status=profile.subscription_status,
         subscription_expires_at=profile.subscription_expires_at,
+        trial_days_remaining=_trial_days_remaining(profile),
         parent_limit=limit,
         child_phone=profile.child_phone,
         telegram_chat_id=profile.telegram_chat_id,
@@ -118,6 +160,20 @@ async def upsert_profile(
     db: AsyncSession = Depends(get_db),
 ):
     profile = await _ensure_profile(user, db)
+    profile.child_phone = _normalize_phone(data.child_phone) if data.child_phone else None
+    profile.telegram_chat_id = data.telegram_chat_id.strip() if data.telegram_chat_id else None
+    db.add(profile)
+    await db.flush()
+    return await _profile_response(user, db)
+
+
+@router.post("/subscription/checkout", response_model=QalqanProfileResponse)
+async def checkout_subscription(
+    data: QalqanSubscriptionCheckoutRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    profile = await _ensure_profile(user, db)
     next_plan = _normalize_plan(data.subscription_plan)
     next_period = _normalize_period(data.subscription_period)
     limit = PLAN_LIMITS[next_plan]
@@ -131,15 +187,10 @@ async def upsert_profile(
             ),
         )
 
-    period_changed = profile.subscription_period != next_period
-    plan_changed = profile.subscription_plan != next_plan
     profile.subscription_plan = next_plan
     profile.subscription_period = next_period
     profile.subscription_status = "active"
-    if period_changed or plan_changed or profile.subscription_expires_at is None:
-        profile.subscription_expires_at = _subscription_expiry(next_period)
-    profile.child_phone = _normalize_phone(data.child_phone) if data.child_phone else None
-    profile.telegram_chat_id = data.telegram_chat_id.strip() if data.telegram_chat_id else None
+    profile.subscription_expires_at = _subscription_expiry(next_period)
     db.add(profile)
     await db.flush()
     return await _profile_response(user, db)
@@ -156,6 +207,7 @@ async def bind_parent(
     db: AsyncSession = Depends(get_db),
 ):
     profile = await _ensure_profile(user, db)
+    await _require_available_subscription(profile, db)
     limit = PLAN_LIMITS.get(profile.subscription_plan, 1)
     phone = _normalize_phone(data.phone)
 
@@ -207,6 +259,7 @@ async def send_alert(
     db: AsyncSession = Depends(get_db),
 ):
     profile = await _ensure_profile(user, db)
+    await _require_available_subscription(profile, db)
     message = _build_alert_message(data, profile)
     telegram_sent = await _send_telegram(profile.telegram_chat_id, message, data.parent_phone)
 
