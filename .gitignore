@@ -7,7 +7,10 @@ dist/
 build/
 .venv/
 venv/
+backend/.venv312/
 .env
+.postgres-data/
+.gradle/
 
 # ── Docker ──────────────────────────────────────
 docker-compose.override.yml
