@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qalqan_app/core/api/api_client.dart';
@@ -49,6 +50,10 @@ class _QalqanScreenState extends State<QalqanScreen> {
   @override
   void initState() {
     super.initState();
+    if (kIsWeb) {
+      _status = 'Web-режим: доступна настройка backend';
+      return;
+    }
     _eventsSubscription = _eventChannel.receiveBroadcastStream().listen(
       _onNativeEvent,
     );
@@ -77,11 +82,13 @@ class _QalqanScreenState extends State<QalqanScreen> {
   Future<void> _enableProtection() async {
     setState(() => _busy = true);
     try {
-      await _methodChannel.invokeMethod('requestPermissions');
-      await _methodChannel.invokeMethod('configure', {
-        'parentPhone': _parentPhoneController.text.trim(),
-        'childPhone': _childPhoneController.text.trim(),
-      });
+      if (!kIsWeb) {
+        await _methodChannel.invokeMethod('requestPermissions');
+        await _methodChannel.invokeMethod('configure', {
+          'parentPhone': _parentPhoneController.text.trim(),
+          'childPhone': _childPhoneController.text.trim(),
+        });
+      }
       await ApiClient.dio.put(
         '/qalqan/profile',
         data: {
@@ -102,7 +109,9 @@ class _QalqanScreenState extends State<QalqanScreen> {
       if (!mounted) return;
       setState(() {
         _protectionEnabled = true;
-        _status = 'Защита включена. Ожидаю звонок.';
+        _status = kIsWeb
+            ? 'Backend-настройки сохранены'
+            : 'Защита включена. Ожидаю звонок.';
       });
     } on DioException catch (error) {
       _showError(
@@ -187,7 +196,11 @@ class _QalqanScreenState extends State<QalqanScreen> {
     final smsText =
         '[ТРЕВОГА АНТИФРОД] Маме звонят мошенники! Обнаружена фраза "$phrase". СРОЧНО перезвони ей: ${_parentPhoneController.text.trim()}';
     try {
-      await _methodChannel.invokeMethod('sendEmergencySms', {'text': smsText});
+      if (!kIsWeb) {
+        await _methodChannel.invokeMethod('sendEmergencySms', {
+          'text': smsText,
+        });
+      }
       await _sendBackendAlert(
         alertType: 'speech_trigger',
         triggerPhrase: phrase,

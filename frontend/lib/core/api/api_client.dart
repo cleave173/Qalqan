@@ -1,13 +1,10 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:qalqan_app/core/api/api_base_url.dart';
 
 /// Dio HTTP client with JWT Bearer token interceptor.
 class ApiClient {
-  // Android emulator uses 10.0.2.2 to reach the host FastAPI server.
-  static final String _baseUrl = Platform.isAndroid
-      ? 'http://10.0.2.2:8000'
-      : 'http://localhost:8000';
+  static final String _baseUrl = resolveApiBaseUrl();
   static const String _tokenKey = 'auth_token';
 
   static final FlutterSecureStorage _storage = const FlutterSecureStorage();
