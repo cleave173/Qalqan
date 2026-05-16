@@ -69,6 +69,14 @@ Main Qalqan endpoints:
 - `DELETE /qalqan/parents/{parent_id}`
 - `POST /qalqan/alerts`
 
+Subscription MVP:
+
+- `personal` allows 1 parent phone.
+- `family` allows up to 4 parent phones.
+- `subscription_period` can be `monthly` or `yearly`.
+- Payment is not connected in the MVP, but the selected plan and period are persisted in PostgreSQL.
+- Downgrading from `family` to `personal` is blocked when more than 1 parent phone is already bound.
+
 All Qalqan endpoints use the existing Bearer JWT auth flow.
 
 ## Android App

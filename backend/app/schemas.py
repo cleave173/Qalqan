@@ -34,6 +34,7 @@ class UserResponse(BaseModel):
 
 class QalqanProfileUpsert(BaseModel):
     subscription_plan: str = "personal"
+    subscription_period: str = "monthly"
     child_phone: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
@@ -55,6 +56,9 @@ class QalqanParentResponse(BaseModel):
 
 class QalqanProfileResponse(BaseModel):
     subscription_plan: str
+    subscription_period: str
+    subscription_status: str
+    subscription_expires_at: Optional[datetime] = None
     parent_limit: int
     child_phone: Optional[str] = None
     telegram_chat_id: Optional[str] = None

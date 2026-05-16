@@ -1,6 +1,7 @@
 """Qalqan family protection MVP router."""
 import os
 import re
+from datetime import datetime, timedelta
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,11 +27,23 @@ PLAN_LIMITS = {
     "family": 4,
 }
 
+PERIOD_DAYS = {
+    "monthly": 30,
+    "yearly": 365,
+}
+
 
 def _normalize_plan(plan: str) -> str:
     normalized = plan.strip().lower()
     if normalized not in PLAN_LIMITS:
         raise HTTPException(status_code=400, detail="Unknown Qalqan tariff")
+    return normalized
+
+
+def _normalize_period(period: str) -> str:
+    normalized = period.strip().lower()
+    if normalized not in PERIOD_DAYS:
+        raise HTTPException(status_code=400, detail="Unknown Qalqan billing period")
     return normalized
 
 
@@ -44,10 +57,29 @@ def _normalize_phone(phone: str) -> str:
 async def _ensure_profile(user: User, db: AsyncSession) -> QalqanProfile:
     profile = await db.get(QalqanProfile, user.id)
     if profile is None:
-        profile = QalqanProfile(user_id=user.id, subscription_plan="personal")
+        profile = QalqanProfile(
+            user_id=user.id,
+            subscription_plan="personal",
+            subscription_period="monthly",
+            subscription_status="active",
+            subscription_expires_at=_subscription_expiry("monthly"),
+        )
         db.add(profile)
         await db.flush()
     return profile
+
+
+def _subscription_expiry(period: str) -> datetime:
+    return datetime.utcnow() + timedelta(days=PERIOD_DAYS[period])
+
+
+async def _parent_count(user: User, db: AsyncSession) -> int:
+    count_result = await db.execute(
+        select(func.count(QalqanParentPhone.id)).where(
+            QalqanParentPhone.child_user_id == user.id
+        )
+    )
+    return count_result.scalar_one()
 
 
 async def _profile_response(user: User, db: AsyncSession) -> QalqanProfileResponse:
@@ -61,6 +93,9 @@ async def _profile_response(user: User, db: AsyncSession) -> QalqanProfileRespon
     limit = PLAN_LIMITS.get(profile.subscription_plan, 1)
     return QalqanProfileResponse(
         subscription_plan=profile.subscription_plan,
+        subscription_period=profile.subscription_period,
+        subscription_status=profile.subscription_status,
+        subscription_expires_at=profile.subscription_expires_at,
         parent_limit=limit,
         child_phone=profile.child_phone,
         telegram_chat_id=profile.telegram_chat_id,
@@ -83,7 +118,26 @@ async def upsert_profile(
     db: AsyncSession = Depends(get_db),
 ):
     profile = await _ensure_profile(user, db)
-    profile.subscription_plan = _normalize_plan(data.subscription_plan)
+    next_plan = _normalize_plan(data.subscription_plan)
+    next_period = _normalize_period(data.subscription_period)
+    limit = PLAN_LIMITS[next_plan]
+    current_count = await _parent_count(user, db)
+    if current_count > limit:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Current parent count ({current_count}) exceeds "
+                f"{next_plan} tariff limit ({limit})"
+            ),
+        )
+
+    period_changed = profile.subscription_period != next_period
+    plan_changed = profile.subscription_plan != next_plan
+    profile.subscription_plan = next_plan
+    profile.subscription_period = next_period
+    profile.subscription_status = "active"
+    if period_changed or plan_changed or profile.subscription_expires_at is None:
+        profile.subscription_expires_at = _subscription_expiry(next_period)
     profile.child_phone = _normalize_phone(data.child_phone) if data.child_phone else None
     profile.telegram_chat_id = data.telegram_chat_id.strip() if data.telegram_chat_id else None
     db.add(profile)
@@ -114,12 +168,7 @@ async def bind_parent(
     if existing.scalar_one_or_none():
         return await _profile_response(user, db)
 
-    count_result = await db.execute(
-        select(func.count(QalqanParentPhone.id)).where(
-            QalqanParentPhone.child_user_id == user.id
-        )
-    )
-    current_count = count_result.scalar_one()
+    current_count = await _parent_count(user, db)
     if current_count >= limit:
         raise HTTPException(
             status_code=409,

@@ -42,6 +42,11 @@ class QalqanProfile(Base):
         PG_UUID(as_uuid=True), ForeignKey("users.id"), primary_key=True
     )
     subscription_plan: Mapped[str] = mapped_column(String(20), default="personal")
+    subscription_period: Mapped[str] = mapped_column(String(20), default="monthly")
+    subscription_status: Mapped[str] = mapped_column(String(20), default="active")
+    subscription_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
     child_phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     telegram_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -44,22 +44,31 @@ class _QalqanScreenState extends State<QalqanScreen> {
   bool _callActive = false;
   bool _protectionEnabled = false;
   bool _busy = false;
+  bool _profileLoading = false;
   String _status = 'Защита не включена';
   String _lastTranscript = '';
   String? _lastTrigger;
   DateTime? _lastTriggerAt;
+  String _subscriptionPlan = 'personal';
+  String _billingPeriod = 'monthly';
+  String _subscriptionStatus = 'active';
+  String? _subscriptionExpiresAt;
+  int _parentLimit = 1;
+  int _parentCount = 0;
 
   @override
   void initState() {
     super.initState();
     if (kIsWeb) {
       _status = 'Web-режим: доступна настройка backend';
+      _loadProfile();
       return;
     }
     _eventsSubscription = _eventChannel.receiveBroadcastStream().listen(
       _onNativeEvent,
     );
     _initSpeech();
+    _loadProfile();
   }
 
   @override
@@ -91,23 +100,26 @@ class _QalqanScreenState extends State<QalqanScreen> {
           'childPhone': _childPhoneController.text.trim(),
         });
       }
-      await ApiClient.dio.put(
+      final profileResponse = await ApiClient.dio.put(
         '/qalqan/profile',
         data: {
-          'subscription_plan': 'personal',
+          'subscription_plan': _subscriptionPlan,
+          'subscription_period': _billingPeriod,
           'child_phone': _childPhoneController.text.trim(),
           'telegram_chat_id': _telegramChatController.text.trim().isEmpty
               ? null
               : _telegramChatController.text.trim(),
         },
       );
-      await ApiClient.dio.post(
+      _applyProfile(profileResponse.data);
+      final parentsResponse = await ApiClient.dio.post(
         '/qalqan/parents',
         data: {
           'phone': _parentPhoneController.text.trim(),
           'display_name': 'Мама',
         },
       );
+      _applyProfile(parentsResponse.data);
       if (!mounted) return;
       setState(() {
         _protectionEnabled = true;
@@ -124,6 +136,50 @@ class _QalqanScreenState extends State<QalqanScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _loadProfile() async {
+    setState(() => _profileLoading = true);
+    try {
+      final response = await ApiClient.dio.get('/qalqan/profile');
+      _applyProfile(response.data);
+    } on DioException {
+      // The auth screen owns unauthenticated state; this screen can stay editable.
+    } finally {
+      if (mounted) setState(() => _profileLoading = false);
+    }
+  }
+
+  void _applyProfile(dynamic data) {
+    if (data is! Map) return;
+    final parents = data['parents'];
+    if (!mounted) return;
+    setState(() {
+      _subscriptionPlan = data['subscription_plan']?.toString() ?? 'personal';
+      _billingPeriod = data['subscription_period']?.toString() ?? 'monthly';
+      _subscriptionStatus = data['subscription_status']?.toString() ?? 'active';
+      _subscriptionExpiresAt = data['subscription_expires_at']?.toString();
+      _parentLimit = int.tryParse(data['parent_limit']?.toString() ?? '') ?? 1;
+      _parentCount = parents is List ? parents.length : 0;
+      _childPhoneController.text =
+          data['child_phone']?.toString() ?? _childPhoneController.text;
+      _telegramChatController.text =
+          data['telegram_chat_id']?.toString() ?? _telegramChatController.text;
+      if (parents is List && parents.isNotEmpty) {
+        final first = parents.first;
+        if (first is Map && first['phone'] != null) {
+          _parentPhoneController.text = first['phone'].toString();
+        }
+      }
+    });
+  }
+
+  void _setSubscription({String? plan, String? period}) {
+    setState(() {
+      _subscriptionPlan = plan ?? _subscriptionPlan;
+      _billingPeriod = period ?? _billingPeriod;
+      _parentLimit = _subscriptionPlan == 'family' ? 4 : 1;
+    });
   }
 
   Future<void> _onNativeEvent(dynamic event) async {
@@ -290,11 +346,25 @@ class _QalqanScreenState extends State<QalqanScreen> {
                         busy: _busy,
                         onEnable: _enableProtection,
                       );
+                      final subscription = _SubscriptionPanel(
+                        plan: _subscriptionPlan,
+                        period: _billingPeriod,
+                        status: _subscriptionStatus,
+                        expiresAt: _subscriptionExpiresAt,
+                        parentLimit: _parentLimit,
+                        parentCount: _parentCount,
+                        loading: _profileLoading,
+                        onPlanChanged: (value) => _setSubscription(plan: value),
+                        onPeriodChanged: (value) =>
+                            _setSubscription(period: value),
+                      );
 
                       if (!wide) {
                         return Column(
                           children: [
                             statusPanel,
+                            const SizedBox(height: 14),
+                            subscription,
                             const SizedBox(height: 14),
                             controls,
                           ],
@@ -306,7 +376,16 @@ class _QalqanScreenState extends State<QalqanScreen> {
                         children: [
                           Expanded(flex: 11, child: statusPanel),
                           const SizedBox(width: 16),
-                          Expanded(flex: 9, child: controls),
+                          Expanded(
+                            flex: 9,
+                            child: Column(
+                              children: [
+                                subscription,
+                                const SizedBox(height: 16),
+                                controls,
+                              ],
+                            ),
+                          ),
                         ],
                       );
                     },
@@ -542,6 +621,136 @@ class _SettingsPanel extends StatelessWidget {
                   )
                 : const Icon(Icons.power_settings_new),
             label: const Text('Сохранить и включить'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubscriptionPanel extends StatelessWidget {
+  const _SubscriptionPanel({
+    required this.plan,
+    required this.period,
+    required this.status,
+    required this.expiresAt,
+    required this.parentLimit,
+    required this.parentCount,
+    required this.loading,
+    required this.onPlanChanged,
+    required this.onPeriodChanged,
+  });
+
+  final String plan;
+  final String period;
+  final String status;
+  final String? expiresAt;
+  final int parentLimit;
+  final int parentCount;
+  final bool loading;
+  final ValueChanged<String> onPlanChanged;
+  final ValueChanged<String> onPeriodChanged;
+
+  String get _planTitle => plan == 'family' ? 'Family' : 'Personal';
+  String get _periodTitle => period == 'yearly' ? 'Годовая' : 'Месячная';
+
+  String get _expiresText {
+    final raw = expiresAt;
+    if (raw == null || raw.isEmpty) return 'Будет рассчитано после сохранения';
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return raw;
+    final day = parsed.day.toString().padLeft(2, '0');
+    final month = parsed.month.toString().padLeft(2, '0');
+    return '$day.$month.${parsed.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Подписка',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              if (loading)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                _StatePill(label: status, tone: _PillTone.success),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Выбери тариф и период. Оплата в MVP не подключена, но лимиты работают через backend.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 18),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'personal',
+                icon: Icon(Icons.person_outline),
+                label: Text('Personal'),
+              ),
+              ButtonSegment(
+                value: 'family',
+                icon: Icon(Icons.groups_outlined),
+                label: Text('Family'),
+              ),
+            ],
+            selected: {plan},
+            onSelectionChanged: (selection) => onPlanChanged(selection.first),
+          ),
+          const SizedBox(height: 12),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'monthly',
+                icon: Icon(Icons.calendar_view_month_outlined),
+                label: Text('Месяц'),
+              ),
+              ButtonSegment(
+                value: 'yearly',
+                icon: Icon(Icons.event_available_outlined),
+                label: Text('Год'),
+              ),
+            ],
+            selected: {period},
+            onSelectionChanged: (selection) => onPeriodChanged(selection.first),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricTile(
+                  icon: Icons.verified_outlined,
+                  label: 'Тариф',
+                  value: '$_planTitle / $_periodTitle',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MetricTile(
+                  icon: Icons.contact_phone_outlined,
+                  label: 'Родители',
+                  value: '$parentCount / $parentLimit',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _StatePill(
+            label: 'Активна до: $_expiresText',
+            tone: _PillTone.neutral,
           ),
         ],
       ),
