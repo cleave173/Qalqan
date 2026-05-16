@@ -96,7 +96,7 @@ Build APK:
 
 ```bash
 cd frontend
-flutter build apk --debug
+flutter build apk --debug --dart-define=API_BASE_URL=http://192.168.10.12:8000
 ```
 
 Debug APK output:
@@ -107,8 +107,22 @@ frontend/build/app/outputs/flutter-apk/app-debug.apk
 
 The Flutter project is Android-focused for this MVP.
 
+Physical Android checklist:
+
+1. Keep the phone and Mac on the same Wi-Fi network.
+2. Start backend with `docker compose up -d db api`.
+3. Check the Mac LAN IP with `ifconfig | grep "inet "`.
+4. Build or run the app with `--dart-define=API_BASE_URL=http://<MAC_IP>:8000`.
+5. Install `frontend/build/app/outputs/flutter-apk/app-debug.apk` on the phone.
+6. Allow Phone, Microphone, SMS receive/read/send permissions on first launch.
+7. Open Android Settings -> Accessibility and enable Qalqan service.
+8. In Telegram, the child must open `@qalqan1_bot` and press Start.
+9. Put the child's Telegram `chat_id` into the app.
+10. Use Family when more than one parent phone must be bound.
+
 ## Notes
 
 - Target SDK is set to `29` for the requested Android 9-10 compatibility profile.
 - `minSdk` is `24`; `targetSdk` is `29` for the requested Android 9-10 compatibility profile.
+- Physical phones cannot reach the Mac backend through `10.0.2.2`; that address is only for Android emulators.
 - Speech-to-text during a phone call depends on Android device, firmware and audio routing behavior. The critical SMS path and direct SMS alert path are native and do not depend on internet access.
