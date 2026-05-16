@@ -73,12 +73,20 @@ Main Qalqan endpoints:
 Subscription MVP:
 
 - New child accounts start with a 20-day `trial`.
-- `personal` allows 1 parent phone: `990 ₸ / month` or `9 900 ₸ / year`.
-- `family` allows up to 4 parent phones: `2 490 ₸ / month` or `24 900 ₸ / year`.
+- `personal` allows 1 parent phone: `1 990 ₸ / month` or `19 900 ₸ / year`.
+- `family` allows up to 4 parent phones: `4 990 ₸ / month` or `49 900 ₸ / year`.
 - `subscription_period` can be `monthly` or `yearly`.
 - Real payments are not connected in the MVP. The app uses a demo checkout flow and stores the resulting active subscription in PostgreSQL.
 - Trial and paid subscriptions have expiration dates. Expired subscriptions are blocked until demo checkout is completed again.
 - Downgrading from `family` to `personal` is blocked when more than 1 parent phone is already bound.
+
+Pricing rationale:
+
+- Qalqan is positioned as antifraud protection, not a generic parental-control utility. The value is measured against prevented fraud losses, not entertainment subscription prices.
+- `personal` stays below 2 000 ₸ monthly to keep the first purchase psychologically simple after the 20-day trial.
+- `family` costs 4 990 ₸ monthly because it protects up to 4 parent phones. At full usage this is about 1 250 ₸ per protected parent.
+- Yearly plans are priced at roughly 10 months of monthly payments, so the annual option feels meaningfully better without making monthly plans look unfair.
+- The main commercial target is `family yearly`: it has the clearest value story for adult children protecting parents and gives the project better unit economics.
 
 All Qalqan endpoints use the existing Bearer JWT auth flow.
 

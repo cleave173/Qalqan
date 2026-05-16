@@ -18,10 +18,10 @@ class QalqanScreen extends StatefulWidget {
 }
 
 String _subscriptionPrice(String plan, String period) {
-  if (plan == 'family' && period == 'yearly') return '24 900 ₸';
-  if (plan == 'family') return '2 490 ₸';
-  if (period == 'yearly') return '9 900 ₸';
-  return '990 ₸';
+  if (plan == 'family' && period == 'yearly') return '49 900 ₸';
+  if (plan == 'family') return '4 990 ₸';
+  if (period == 'yearly') return '19 900 ₸';
+  return '1 990 ₸';
 }
 
 class _QalqanScreenState extends State<QalqanScreen> {
