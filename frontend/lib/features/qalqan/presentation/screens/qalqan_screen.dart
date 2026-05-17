@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qalqan_app/core/api/api_client.dart';
 import 'package:qalqan_app/core/theme/app_theme.dart';
+import 'package:qalqan_app/core/widgets/qalqan_logo.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -533,14 +534,9 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: AppTheme.primaryDark,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Icon(Icons.shield_outlined, color: Colors.white),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: const QalqanLogo(height: 44, full: false, fit: BoxFit.cover),
         ),
         const SizedBox(width: 12),
         Expanded(
